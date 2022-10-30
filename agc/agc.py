@@ -71,22 +71,63 @@ def get_arguments():
     return parser.parse_args()
 
 def read_fasta(amplicon_file, minseqlen):
-    pass
+    with gzip.open(amplicon_file, "rt") as filein:
+        len_sequences = 0
+        sequence = ""
+        for line in filein:
+            if line.startswith(">") and len_sequences >= minseqlen :
+                yield sequence
+            if line.startswith(">") :
+                sequence = ""
+                len_sequences = 0
+                continue
+            sequence += line.strip()
+            len_sequences += len(line.strip())
+        yield sequence
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
-    pass
+    sequences = read_fasta(amplicon_file, minseqlen)
+    dict_seqs = {}
+    for seq in sequences :
+        if seq not in dict_seqs :
+            dict_seqs[seq] = 1
+        else :
+            dict_seqs[seq] += 1
+    dict_seqs_sorted = dict(sorted(dict_seqs.items(), key=lambda item: item[1], reverse=True))
+
+    for seq in dict_seqs_sorted:
+        if dict_seqs_sorted[seq] > mincount :
+            yield (seq, dict_seqs_sorted[seq])
 
 def get_identity(alignment_list):
     """Prend en une liste de séquences alignées au format ["SE-QUENCE1", "SE-QUENCE2"]
     Retourne le pourcentage d'identite entre les deux."""
-    pass
+    nb_id =  0
+    len_ali = len(alignment_list[0])
+    for i in range(len_ali):
+        if alignment_list[0][i] == alignment_list[1][i]:
+            nb_id += 1
+    return nb_id / len_ali * 100
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+    sequences = list(dereplication_fulllength(amplicon_file, minseqlen, mincount))
+    otu = []
+    pourc_id = 97
+    for seq1 in sequences:
+        for seq2 in sequences:
+            global_align = nw.global_align(seq1[0], seq2[0], gap_open=-1, gap_extend=-1,
+                                    matrix=os.path.abspath(os.path.join(os.path.dirname(__file__), "MATCH")))
+            if get_identity(global_align) <= pourc_id:
+                otu.append(seq1)
+    return otu
 
 def write_OTU(OTU_list, output_file):
-    pass
+    with open(output_file, "w") as fileout:
+        i = 0
+        for sequences in OTU_list:
+            fileout.write(f">OTU_{i} occurrence:{sequences[1]}\n{textwrap.fill(sequences[0], width=80)}\n")
+            i += 1
 
 #==============================================================
 # Main program
